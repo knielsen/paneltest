@@ -11,6 +11,20 @@
 
 
 static void
+my_puts(const char *s)
+{
+  char c;
+
+  while ((c = *s++))
+  {
+    while (!serial_writeable())
+      ;
+    serial_write(c);
+  }
+}
+
+
+static void
 init(void)
 {
   serial_baud_115200();
@@ -24,21 +38,53 @@ init(void)
   pin_mode_input(PIN_MISO);
   pin_mode_input(PIN_ACK);
   pin_high(PIN_CS);
-  pin_low(PIN_SCLK);
+  pin_high(PIN_SCLK);
 }
 
 
 static void
-my_puts(const char *s)
+wait_for_ack(void)
 {
-  char c;
+  uint16_t i;
 
-  while ((c = *s++))
+  for (i = 0; i < 60000; ++i)
   {
-    while (!serial_writeable())
-      ;
-    serial_write(c);
+    if (!pin_is_high(PIN_ACK))
+      break;
   }
+  if (i == 60000)
+    my_puts("TIMOUT\r\n");
+}
+
+
+static uint8_t
+panel_send_byte(uint8_t b_out)
+{
+  uint8_t i;
+  uint8_t b_in;
+
+  pin_low(PIN_CS);
+  wait_for_ack();
+
+  b_in = 0;
+  for (i = 0; i < 8; ++i)
+  {
+    if (b_out & 0x80)
+      pin_high(PIN_MOSI);
+    else
+      pin_low(PIN_MOSI);
+    pin_low(PIN_SCLK);
+    _delay_us(5);
+    b_in <<= 1;
+    if (pin_is_high(PIN_MISO))
+      b_in |= 1;
+    pin_high(PIN_SCLK);
+    _delay_us(5);
+  }
+  wait_for_ack();
+  pin_high(PIN_CS);
+
+  return b_in;
 }
 
 
